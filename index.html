@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IRIS Reflex Challenge</title>
+  <meta name="description" content="A reaction-time arcade game played with four physical buttons on an ESP32. Hit the colour, beat the clock.">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=chillax@400,500,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="#top" aria-label="IRIS Reflex Challenge, back to start">
+      <img class="brand-logo" src="public/logo-header.svg" width="864" height="460" alt="IRIS">
+    </a>
+    <nav aria-label="Page">
+      <a class="nav-link" href="#leaderboard">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div id="banner" class="banner" role="alert" hidden></div>
+
+    <!-- A. Player setup -->
+    <section id="screen-setup" class="field field-ground screen" aria-labelledby="setup-title">
+      <div class="wrap setup-grid">
+        <div class="setup-copy">
+          <h1 id="setup-title" class="enter">Hit the colour.<br>Beat the clock.</h1>
+          <p class="lead enter">IRIS Reflex Challenge: four prompts, four buttons, one average reaction time.</p>
+
+          <form id="setup-form" class="enter" novalidate>
+            <label for="player-name">Player name</label>
+            <input id="player-name" name="player-name" type="text" maxlength="24" autocomplete="off" placeholder="Type your name" required>
+            <p id="name-error" class="field-error" hidden>Enter a name first.</p>
+
+            <div class="mode-row">
+              <button type="button" id="btn-connect" class="btn btn-paper">Connect ESP32</button>
+              <button type="button" id="btn-software" class="btn btn-paper">Use software mode</button>
+            </div>
+
+            <p class="status-line">
+              <span class="status-label">Input</span>
+              <span id="status-pill" class="pill pill-off" aria-live="polite">Disconnected</span>
+            </p>
+            <p id="mode-hint" class="hint">Plug in the ESP32 and use Chrome or Edge, or play with the on-screen buttons and keys 1 to 4.</p>
+
+            <button type="submit" id="btn-start" class="btn btn-go" disabled>Start challenge</button>
+          </form>
+        </div>
+
+        <div class="board enter" data-ui aria-hidden="true">
+          <div class="key key-1">1</div>
+          <div class="key key-2">2</div>
+          <div class="key key-3">3</div>
+          <div class="key key-4">4</div>
+        </div>
+      </div>
+
+      <div class="ticker" aria-hidden="true">
+        <div class="ticker-track">
+          <span class="chip c1">Press 1</span><span class="chip c2">Press 2</span><span class="chip c3">Press 3</span><span class="chip c4">Press 4</span>
+          <span class="chip c3">Press 3</span><span class="chip c1">Press 1</span><span class="chip c4">Press 4</span><span class="chip c2">Press 2</span>
+          <span class="chip c1">Press 1</span><span class="chip c2">Press 2</span><span class="chip c3">Press 3</span><span class="chip c4">Press 4</span>
+          <span class="chip c3">Press 3</span><span class="chip c1">Press 1</span><span class="chip c4">Press 4</span><span class="chip c2">Press 2</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- B. Challenge: the whole field takes the colour of the target button -->
+    <section id="screen-challenge" class="field field-play screen" data-target="0" aria-labelledby="challenge-title" hidden>
+      <div class="wrap play-grid">
+        <h2 id="challenge-title" class="visually-hidden">Challenge</h2>
+        <div class="play-top">
+          <span id="question-count" class="lead">Question 1 of 4</span>
+          <span id="challenge-mode" class="pill pill-on-field"></span>
+        </div>
+        <ol id="progress" class="progress" aria-hidden="true"><li></li><li></li><li></li><li></li></ol>
+
+        <div class="play-main">
+          <p id="prompt" class="prompt" aria-live="assertive"><span class="prompt-word">Get ready</span></p>
+          <p class="live" aria-hidden="true"><span id="live-ms" class="live-ms">0</span><span class="live-unit">ms</span></p>
+        </div>
+        <p id="feedback" class="feedback" aria-live="polite">&nbsp;</p>
+
+        <div id="tiles" class="tiles" data-ui role="group" aria-label="Buttons">
+          <button type="button" class="tile" data-button="1" aria-label="Button 1"><span>1</span></button>
+          <button type="button" class="tile" data-button="2" aria-label="Button 2"><span>2</span></button>
+          <button type="button" class="tile" data-button="3" aria-label="Button 3"><span>3</span></button>
+          <button type="button" class="tile" data-button="4" aria-label="Button 4"><span>4</span></button>
+        </div>
+        <button type="button" id="btn-quit" class="btn btn-ghost">Quit round</button>
+      </div>
+    </section>
+
+    <!-- C. Results -->
+    <section id="screen-results" class="field field-ink screen" aria-labelledby="results-title" hidden>
+      <div class="wrap results-grid">
+        <div class="results-head">
+          <h2 id="results-title" tabindex="-1">Round complete.</h2>
+          <p class="result-player"><strong id="result-name"></strong> finished the round</p>
+          <p class="average"><span id="result-average" class="average-fig">0</span><span class="average-unit">ms average</span></p>
+          <p id="result-rank" class="lead"></p>
+        </div>
+
+        <div class="results-bars">
+          <ol id="result-times" class="bars" data-ui></ol>
+          <p id="save-message" class="hint" aria-live="polite"></p>
+          <div class="action-row">
+            <button type="button" id="btn-save" class="btn btn-go">Save score</button>
+            <button type="button" id="btn-again" class="btn btn-paper">Play again</button>
+            <button type="button" id="btn-back" class="btn btn-ghost">Back to setup</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- D. Leaderboard -->
+    <section id="leaderboard" class="field field-yellow" aria-labelledby="lb-title">
+      <div class="wrap lb-grid">
+        <div class="lb-head">
+          <h2 id="lb-title">Leaderboard</h2>
+          <p class="lead">Scores live in this browser only. They are not shared online.</p>
+          <dl id="lb-stats" class="lb-stats">
+            <div><dt>Fastest average</dt><dd id="stat-best">&ndash;</dd></div>
+            <div><dt>Scores saved</dt><dd id="stat-count">0</dd></div>
+            <div><dt>Board average</dt><dd id="stat-avg">&ndash;</dd></div>
+          </dl>
+        </div>
+        <div class="lb-body-wrap">
+          <p id="lb-empty" class="lb-empty" hidden><strong>Be first on the board.</strong><span>No scores yet. Finish a round and save it to take the first place.</span></p>
+          <div class="table-wrap" data-ui>
+            <table id="lb-table" hidden>
+              <thead>
+                <tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col" class="num">Average</th><th scope="col" class="date">Date</th></tr>
+              </thead>
+              <tbody id="lb-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="field field-red site-footer">
+    <div class="wrap footer-grid">
+      <p class="lead">Times are measured in the browser, so they include a little USB and serial delay. Compare scores on the same setup.</p>
+      <p class="footer-links"><a href="#top">Back to top</a></p>
+    </div>
+    <p class="wordmark" aria-hidden="true">IRIS</p>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
