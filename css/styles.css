@@ -125,19 +125,6 @@ h2[tabindex="-1"]:focus { outline: none; }
 .btn-ghost { background: transparent; color: inherit; border: 3px solid currentColor; border-bottom-width: 6px; }
 .btn-ghost:hover:not(:disabled) { border-bottom-width: 9px; }
 
-/* ---------- Status pill ---------- */
-.pill {
-  display: inline-flex; align-items: center; gap: 10px;
-  padding: 6px 14px 6px 10px; font-weight: 600; font-size: var(--step-small);
-  background: var(--paper); color: var(--ink);
-}
-.pill::before { content: ""; width: 12px; height: 12px; background: var(--muted-dot, #8b90a8); }
-.pill-busy::before { background: var(--c4); animation: blink 0.7s steps(2) infinite; }
-.pill-ok::before { background: var(--c3); }
-.pill-err::before { background: var(--c1); }
-.pill-on-field { background: var(--paper); color: var(--ink); }
-.pill-on-field:empty { display: none; }
-
 /* ---------- A. Setup ---------- */
 .setup-grid {
   display: grid; grid-template-columns: repeat(12, 1fr); column-gap: var(--gap); row-gap: 40px;
@@ -158,13 +145,9 @@ input[type="text"] {
 }
 input[type="text"]::placeholder { color: #5a5e78; }
 .field-error { font-weight: 600; font-size: var(--step-small); color: var(--c1); }
-.mode-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
-.mode-row .btn { flex: 1 1 220px; }
-.status-line { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-.status-label { font-weight: 600; font-size: var(--step-small); }
 .setup-copy .btn-go { width: 100%; margin-top: 8px; }
 
-/* The board: the four buttons as they sit on the ESP32 */
+/* The four number keys */
 .board {
   grid-column: 8 / span 5;
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
@@ -227,9 +210,6 @@ input[type="text"]::placeholder { color: #5a5e78; }
 .tile.is-target { background: var(--ink); color: var(--paper); }
 .tile.flash-ok { background: var(--tc); color: var(--ink); transform: translateY(6px); }
 .tile.flash-bad { background: var(--ink); color: var(--paper); animation: shake 0.22s; }
-.tiles.software .tile { cursor: pointer; }
-.tiles.software .tile:hover { transform: translateY(-4px); }
-.tiles.software .tile:active { transform: translateY(4px); }
 #btn-quit { justify-self: start; font-size: var(--step-body); min-height: 48px; }
 
 /* ---------- C. Results ---------- */

@@ -89,8 +89,16 @@ function isValidEntry(e) {
   );
 }
 
-function sortEntries(entries) {
-  return entries.sort((a, b) => a.averageMs - b.averageMs);
+// Fastest first, one entry per player (names compare trimmed and case-insensitive).
+function dedupeByName(entries) {
+  const seen = new Set();
+  return entries
+    .slice()
+    .sort((a, b) => a.averageMs - b.averageMs)
+    .filter((e) => {
+      const key = e.name.trim().toLowerCase();
+      return seen.has(key) ? false : seen.add(key);
+    });
 }
 
 // Returns { entries, warning }. Never throws.
@@ -115,7 +123,11 @@ export function loadLeaderboard(storage = globalThis.localStorage) {
 
   const valid = parsed.filter(isValidEntry);
   const warning = valid.length < parsed.length ? "Some invalid leaderboard records were skipped." : null;
-  return { entries: sortEntries(valid).slice(0, MAX_LEADERBOARD_ENTRIES), warning };
+  const entries = dedupeByName(valid).slice(0, MAX_LEADERBOARD_ENTRIES);
+  if (entries.length < valid.length) {
+    try { storage.setItem(STORAGE_KEY, JSON.stringify(entries)); } catch { /* display is still deduped */ }
+  }
+  return { entries, warning };
 }
 
 // Saves a completed result. Returns { ok, entries, error }. Never throws.
@@ -134,11 +146,15 @@ export function saveLeaderboardEntry(results, storage = globalThis.localStorage,
   }
 
   const { entries } = loadLeaderboard(storage); // corrupt data is dropped and replaced
-  const updated = sortEntries([...entries, entry]).slice(0, MAX_LEADERBOARD_ENTRIES);
+  const key = entry.name.trim().toLowerCase();
+  const best = entries.find((e) => e.name.trim().toLowerCase() === key);
+  if (best && best.averageMs <= entry.averageMs) return { ok: true, entries, improved: false, error: null };
+
+  const updated = dedupeByName([...entries, entry]).slice(0, MAX_LEADERBOARD_ENTRIES);
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch {
     return { ok: false, entries, error: "Could not write to local storage (it may be full or disabled)." };
   }
-  return { ok: true, entries: updated, error: null };
+  return { ok: true, entries: updated, improved: true, error: null };
 }

@@ -1,11 +1,10 @@
-// UI wiring and app state. Game rules live in game.js; serial handling lives in hardware.js.
+// UI wiring and app state. Game rules live in game.js; keyboard handling lives in software.js.
 
 import {
   createRound, startQuestion, submitButtonPress, getResults,
   loadLeaderboard, saveLeaderboardEntry,
 } from "./game.js";
-import { connectHardware, disconnectHardware, isSerialSupported } from "./hardware.js";
-import { initSoftwareInput } from "./software.js";
+import { initKeyboardInput } from "./software.js";
 
 const COUNTDOWN_FROM = 5;         // 5, 4, 3, 2, 1 before question 1
 const COUNTDOWN_STEP_MS = 1000;   // one number per second; the reaction timer starts after the last one
@@ -17,9 +16,8 @@ const el = {
   setup: $("screen-setup"), challenge: $("screen-challenge"), results: $("screen-results"),
   leaderboard: $("leaderboard"),
   form: $("setup-form"), name: $("player-name"), nameError: $("name-error"),
-  btnConnect: $("btn-connect"), btnSoftware: $("btn-software"), btnStart: $("btn-start"),
-  statusPill: $("status-pill"), modeHint: $("mode-hint"),
-  questionCount: $("question-count"), challengeMode: $("challenge-mode"),
+  btnStart: $("btn-start"),
+  questionCount: $("question-count"),
   progress: $("progress"), prompt: $("prompt"), liveMs: $("live-ms"), tiles: $("tiles"), feedback: $("feedback"),
   btnQuit: $("btn-quit"),
   resultName: $("result-name"), resultTimes: $("result-times"), resultAverage: $("result-average"),
@@ -33,14 +31,11 @@ const progressEls = Array.from(el.progress.children);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 const state = {
-  mode: null,            // null | "hardware" | "software"
-  connecting: false,
   round: null,
   results: null,
   saved: false,
   timer: null,           // pending setTimeout for ready/transition
   raf: null,             // live millisecond counter
-  stopSoftware: null,
 };
 
 // ---------- Banner ----------
@@ -76,80 +71,7 @@ function playerName() {
 }
 
 function renderStatus() {
-  let text = "Disconnected";
-  let cls = "pill-off";
-  if (state.connecting) { text = "Connecting…"; cls = "pill-busy"; }
-  else if (state.mode === "hardware") { text = "ESP32 connected"; cls = "pill-ok"; }
-  else if (state.mode === "software") { text = "Software mode"; cls = "pill-ok"; }
-  el.statusPill.textContent = state.mode === "hardware" && !state.connecting ? "Connected" : text;
-  el.statusPill.className = `pill ${cls}`;
-  el.challengeMode.textContent = el.statusPill.textContent;
-  el.challengeMode.className = `pill pill-on-field ${cls}`;
-
-  el.btnConnect.disabled = state.connecting || state.mode === "hardware";
-  el.btnConnect.classList.toggle("is-active", state.mode === "hardware");
-  el.btnSoftware.disabled = state.connecting || state.mode === "software";
-  el.btnSoftware.classList.toggle("is-active", state.mode === "software");
-  el.btnStart.disabled = state.connecting || state.mode === null || playerName() === "";
-
-  el.tiles.classList.toggle("software", state.mode === "software");
-}
-
-// ---------- Input sources ----------
-async function stopInputSource() {
-  if (state.stopSoftware) { state.stopSoftware(); state.stopSoftware = null; }
-  await disconnectHardware();
-  state.mode = null;
-}
-
-async function useSoftwareMode() {
-  clearBanner();
-  await stopInputSource();
-  state.stopSoftware = initSoftwareInput({
-    onButtonPress: (id) => handleButton(id, performance.now()),
-    buttonElements: tileEls,
-  });
-  state.mode = "software";
-  renderStatus();
-}
-
-async function connectEsp32() {
-  clearBanner();
-  if (!isSerialSupported()) {
-    showBanner("Web Serial is not supported in this browser. Use Chrome or Edge on desktop, or use software mode.");
-    return;
-  }
-  // Keep any current mode until the connection actually succeeds.
-  const previousMode = state.mode;
-  const ok = await connectHardware({
-    onButtonPress: handleButton,
-    onStatus: (status, info = {}) => {
-      if (status === "connecting") {
-        state.connecting = true;
-      } else if (status === "connected") {
-        state.connecting = false;
-        if (state.stopSoftware) { state.stopSoftware(); state.stopSoftware = null; }
-        state.mode = "hardware";
-      } else if (status === "disconnected") {
-        state.connecting = false;
-        if (info.lost) onHardwareLost();
-        else state.mode = previousMode === "hardware" ? null : previousMode;
-      }
-      renderStatus();
-    },
-    onError: (message) => showBanner(message, "error"),
-  });
-  if (!ok) renderStatus();
-}
-
-function onHardwareLost() {
-  state.mode = null;
-  const screen = currentScreen();
-  if (screen === "challenge") {
-    abortRound();
-    showScreen("setup");
-    showBanner("The ESP32 was disconnected during the round. The round was stopped and no score was saved. Reconnect to play again.");
-  }
+  el.btnStart.disabled = playerName() === "";
 }
 
 // ---------- Game flow ----------
@@ -224,7 +146,6 @@ function setPrompt(wordText, num) {
 function startChallenge() {
   const name = playerName();
   if (!name) { el.nameError.hidden = false; el.name.focus(); return; }
-  if (state.mode === null) return;
   clearBanner();
   clearTimer();
   state.round = createRound(name);
@@ -268,7 +189,7 @@ function showQuestion() {
   startQuestion(round, performance.now()); // timer starts as the prompt is shown
 }
 
-// Single entry point for both hardware and software input.
+// Single entry point for keyboard input.
 function handleButton(buttonId, receivedAt = performance.now()) {
   const round = state.round;
   if (!round || currentScreen() !== "challenge") return;
@@ -409,7 +330,9 @@ function saveScore() {
   state.saved = true; // guard against duplicate saves
   el.btnSave.disabled = true;
   el.btnSave.textContent = "Saved";
-  el.saveMessage.textContent = "Score saved to this browser's leaderboard.";
+  el.saveMessage.textContent = outcome.improved
+    ? "Score saved to this browser's leaderboard."
+    : "Not faster than your saved best, leaderboard unchanged.";
   const mine = outcome.entries.find(
     (e) => e.name === state.results.playerName && e.averageMs === state.results.averageMs
       && e.timesMs.every((t, i) => t === state.results.timesMs[i])
@@ -430,9 +353,6 @@ el.form.addEventListener("submit", (event) => {
   startChallenge();
 });
 
-el.btnConnect.addEventListener("click", connectEsp32);
-el.btnSoftware.addEventListener("click", useSoftwareMode);
-
 el.btnQuit.addEventListener("click", () => {
   abortRound();
   showScreen("setup");
@@ -440,11 +360,6 @@ el.btnQuit.addEventListener("click", () => {
 });
 
 el.btnAgain.addEventListener("click", () => {
-  if (state.mode === null) {
-    showScreen("setup");
-    showBanner("Choose an input mode to play again.", "warn");
-    return;
-  }
   startChallenge();
 });
 
@@ -481,10 +396,6 @@ function initReveal() {
 // ---------- Init ----------
 function init() {
   initReveal();
-  if (!isSerialSupported()) {
-    el.modeHint.textContent =
-      "This browser does not support Web Serial, so ESP32 mode is unavailable. Use Chrome or Edge on desktop, or use software mode.";
-  }
   const { entries, warning } = loadLeaderboard();
   renderLeaderboard(entries);
   if (warning) showBanner(warning, "warn");
@@ -492,4 +403,5 @@ function init() {
   renderStatus();
 }
 
+initKeyboardInput((id) => handleButton(id));
 init();
